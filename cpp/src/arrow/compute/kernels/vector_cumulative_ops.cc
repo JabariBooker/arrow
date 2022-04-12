@@ -34,7 +34,8 @@ template <typename OptionsType>
 struct CumulativeOptionsWrapper : public OptionsWrapper<OptionsType> {
   using State = CumulativeOptionsWrapper<OptionsType>;
 
-  explicit CumulativeOptionsWrapper(OptionsType options) : OptionsWrapper<OptionsType>(std::move(options)) {}
+  explicit CumulativeOptionsWrapper(OptionsType options)
+      : OptionsWrapper<OptionsType>(std::move(options)) {}
 
   static Result<std::unique_ptr<KernelState>> Init(KernelContext* ctx,
                                                    const KernelInitArgs& args) {
@@ -51,7 +52,9 @@ struct CumulativeOptionsWrapper : public OptionsWrapper<OptionsType> {
 
     // Ensure `start` option matches input type
     if (!start->type->Equals(args.inputs[0].type)) {
-      ARROW_ASSIGN_OR_RAISE(auto casted_start, Cast(Datum(start), args.inputs[0].type));
+      ARROW_ASSIGN_OR_RAISE(auto casted_start,
+                            Cast(Datum(start), args.inputs[0].type, CastOptions::Safe(),
+                                 ctx->exec_context()));
       auto new_options = OptionsType(casted_start.scalar(), options->skip_nulls);
       return ::arrow::internal::make_unique<State>(new_options);
     }
@@ -76,18 +79,18 @@ struct CumulativeGeneric {
 
     int64_t base_output_offset = 0;
     bool encountered_null = false;
-    ArrayData* out_arr = out->mutable_array();
 
     switch (batch[0].kind()) {
       case Datum::ARRAY: {
+        ArrayData* out_arr = out->mutable_array();
         auto st = Call(ctx, base_output_offset, *batch[0].array(), out_arr, &start,
                        skip_nulls, &encountered_null);
         out_arr->SetNullCount(arrow::kUnknownNullCount);
         return st;
       }
       case Datum::CHUNKED_ARRAY: {
+        ArrayData* out_arr = out->mutable_array();
         const auto& input = batch[0].chunked_array();
-
         for (const auto& chunk : input->chunks()) {
           RETURN_NOT_OK(Call(ctx, base_output_offset, *chunk->data(), out_arr, &start,
                              skip_nulls, &encountered_null));
